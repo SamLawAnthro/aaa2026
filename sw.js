@@ -1,5 +1,5 @@
 // Offline copy of the program. Star counts are never cached here.
-const CACHE = "aaa26-v5";
+const CACHE = "aaa26-v7";
 const SHELL = ["./", "index.html", "style.css", "app.js", "icon.svg", "data/core.json", "fonts/fonts.css", "fonts/Alegreya-400-latin.woff2", "fonts/AlegreyaSC-500-latin.woff2", "fonts/AlegreyaSC-700-latin.woff2"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {

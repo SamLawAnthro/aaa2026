@@ -27,13 +27,30 @@
   const starred = new Set(store.get("aaa26.starred", []));
   let pending = store.get("aaa26.pending", {}); // sid -> bool
   let counts = store.get("aaa26.counts", {});
+  // Arriving from the old GitHub address: #move=<device>~<ids>. Keep that device id (so counts don't double)
+  // when this browser has no stars here yet, and add the stars. The server ignores repeats.
+  {
+    const hp = new URLSearchParams(location.hash.slice(1));
+    const mv = hp.get("move");
+    if (mv) {
+      const [dev, ids = ""] = mv.split("~");
+      if (/^[a-f0-9-]{36}$/.test(dev) && !starred.size) { device = dev; store.set("aaa26.device", dev); }
+      for (const id of ids.split(",").map(Number).filter(Boolean)) { starred.add(id); pending[id] = true; }
+      store.set("aaa26.starred", [...starred]); store.set("aaa26.pending", pending);
+      hp.delete("move");
+      const rest = hp.toString().replace(/%2C/g, ",");
+      history.replaceState(null, "", location.pathname + location.search + (rest ? "#" + rest : ""));
+    }
+  }
 
   // ---------- state ----------
   let S = [];             // sessions
   const byId = new Map();
   let abstracts = null;   // loaded later
   let types = [], sections = [];
-  const st = { view: "program", day: null, q: "", type: "", sec: "", sel: null, list: null, showEarlier: false, limit: RESULT_PAGE };
+  let GROUPS = [];        // hand-picked groups from core.json
+  const groupOf = new Map(); // session id -> group it belongs to (not "related")
+  const st = { view: "program", day: null, q: "", type: "", sec: "", sel: null, list: null, group: null, showEarlier: false, limit: RESULT_PAGE };
 
   // ---------- time in St. Louis ----------
   function chicagoNow() {
@@ -66,7 +83,8 @@
   function secShort(sec) { return sec ? sec.split(" - ")[0] : ""; }
   function people(x) { return [...(x.org || []), ...(x.co || []), ...(x.chair || []), ...(x.disc || []), ...(x.pres || [])]; }
   function buildIndex(x) {
-    const parts = [x.t, x.ty, x.loc, x.sec, (x.cat || []).join(" "), x.spon, people(x).join(" ")];
+    const g = groupOf.get(x.id);
+    const parts = [x.t, x.ty, x.loc, x.sec, (x.cat || []).join(" "), x.spon, g ? g.name : "", people(x).join(" ")];
     for (const p of x.papers || []) parts.push(p.t, (p.p || []).join(" "), (p.ca || []).join(" "));
     x._h = norm(parts.join(" \u0001 "));
     x._ht = norm(x.t);
@@ -143,7 +161,8 @@
   function rowHTML(x, ts, extra = "") {
     const on = starred.has(x.id);
     const n = counts[x.id] || 0;
-    const meta = [secShort(x.sec) ? `<span class="sec">${esc(secShort(x.sec))}</span>` : "", esc(x.ty), esc(x.loc)].filter(Boolean).join(" · ");
+    const g = groupOf.get(x.id);
+    const meta = [g ? `<span class="grp" title="${esc(g.name)}">${esc(g.short)}</span>` : "", secShort(x.sec) ? `<span class="sec">${esc(secShort(x.sec))}</span>` : "", esc(x.ty), esc(x.loc)].filter(Boolean).join(" · ");
     return `<article class="row${on ? " starred" : ""}${st.sel === x.id ? " sel" : ""}" data-id="${x.id}">
       <button type="button" class="open" data-open="${x.id}"><span class="t">${hl(x.t, ts)}</span><span class="m">${meta}</span>${firstHit(x, ts)}${extra}</button>
       <button type="button" class="star" data-star="${x.id}" aria-pressed="${on}" aria-label="${on ? "Unstar" : "Star"}: ${esc(x.t)}"><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg><span class="c">${n || ""}</span></button>
@@ -251,15 +270,37 @@
     if (!list.length) {
       html += emptyHTML(shared ? "Empty list" : "No stars yet");
     }
-    let lastDay = "";
+    html += listSlots(list, cl);
+    html += `<p class="list-note">${NOTE}</p>`;
+    $("#status").textContent = "";
+    $("#list").innerHTML = html;
+  }
+  const byTime = (a, b) => (a.d + a.s + a.e).localeCompare(b.d + b.s + b.e);
+  function listSlots(list, cl = new Set()) {
+    let html = "", lastDay = "";
     for (const [k, rows] of groupSlots(list)) {
       const [d, s, e] = k.split("|");
       if (d !== lastDay) { html += `<h2 class="day-head">${DAY_LONG[d] || d}</h2>`; lastDay = d; }
       html += slotHTML(d, s, e, rows.map((x) => rowHTML(x, [], cl.has(x.id) ? `<span class="clash">Clash</span>` : "")).join(""));
     }
+    return html;
+  }
+  function renderGroup(g) {
+    if (!g) { $("#status").textContent = ""; $("#list").innerHTML = emptyHTML("Empty list"); return; }
+    const own = g.ids.map((id) => byId.get(id)).filter(Boolean).sort(byTime);
+    const rel = g.related.map((id) => byId.get(id)).filter(Boolean).sort(byTime);
+    const missing = own.filter((x) => !starred.has(x.id)).length;
+    let html = `<div class="bar"><h2>${esc(g.name)} · ${own.length}</h2>`;
+    html += missing ? `<button type="button" class="btn primary" data-starall="${g.k}">Star all ${missing}</button>` : "";
+    html += `<button type="button" class="btn" data-icsg="${g.k}">Add to calendar</button></div>`;
+    html += listSlots(own);
+    if (rel.length) html += `<div class="bar sub"><h2>Related · ${rel.length}</h2></div>` + listSlots(rel);
     html += `<p class="list-note">${NOTE}</p>`;
     $("#status").textContent = "";
     $("#list").innerHTML = html;
+  }
+  function renderGroupLinks() {
+    $("#groups").innerHTML = GROUPS.map((g) => `<a href="#g=${g.k}" data-group="${g.k}"${st.view === "group" && st.group === g.k ? ' aria-current="page"' : ""}><span class="nm">${esc(g.name)}</span><span class="n">${g.ids.length}</span></a>`).join("");
   }
   function emptyHTML(head) { return `<div class="empty"><b>${esc(head)}</b></div>`; }
 
@@ -282,6 +323,8 @@
     add("Section", x.sec);
     add("Topic", (x.cat || []).join("; "));
     add("Sponsor", x.spon);
+    const g = groupOf.get(x.id);
+    if (g) facts.push(`<dt>Group</dt><dd><a href="#g=${g.k}" data-group="${g.k}">${esc(g.name)}</a></dd>`);
     let papers = "";
     if ((x.papers || []).length) {
       papers = `<h3 class="d-sec">Papers</h3><ol class="papers">` + x.papers.map((p, i) => {
@@ -327,12 +370,15 @@
     $("#f-type").classList.toggle("set", !!st.type);
     $("#f-sec").classList.toggle("set", !!st.sec);
     $(".filters").hidden = st.view !== "program";
+    $("#groups").hidden = !(st.view === "program" || st.view === "group") || !GROUPS.length;
+    renderGroupLinks();
   }
 
   function render() {
     renderChrome();
     if (st.view === "starred") renderList([...starred], "Starred", false);
     else if (st.view === "shared") renderList(st.list || [], "Shared list", true);
+    else if (st.view === "group") renderGroup(GROUPS.find((g) => g.k === st.group));
     else renderProgram();
     renderDetail();
   }
@@ -340,7 +386,8 @@
   // ---------- routing (hash holds view, day, query, selection) ----------
   function readHash() {
     const h = new URLSearchParams(location.hash.slice(1));
-    st.view = h.get("v") === "starred" ? "starred" : h.get("list") ? "shared" : "program";
+    st.view = h.get("v") === "starred" ? "starred" : h.get("list") ? "shared" : h.get("g") ? "group" : "program";
+    st.group = h.get("g") || null;
     st.list = h.get("list") ? h.get("list").split(",").map(Number).filter(Boolean) : null;
     st.day = h.get("day") || st.day || defaultDay();
     st.q = h.get("q") || "";
@@ -352,6 +399,7 @@
     const h = new URLSearchParams();
     if (st.view === "starred") h.set("v", "starred");
     if (st.view === "shared" && st.list) h.set("list", st.list.join(","));
+    if (st.view === "group" && st.group) h.set("g", st.group);
     if (st.view === "program" && st.day !== defaultDay()) h.set("day", st.day);
     if (st.q) h.set("q", st.q);
     if (st.sel) h.set("s", st.sel);
@@ -387,7 +435,8 @@
       }
     }
     for (const el of $$(".starred-n")) el.textContent = starred.size || "";
-    if (st.view !== "program") renderList(st.view === "starred" ? [...starred] : st.list || [], st.view === "starred" ? "Starred" : "Shared list", st.view === "shared");
+    if (st.view === "group") renderGroup(GROUPS.find((g) => g.k === st.group));
+    else if (st.view !== "program") renderList(st.view === "starred" ? [...starred] : st.list || [], st.view === "starred" ? "Starred" : "Shared list", st.view === "shared");
   }
   let flushing = false;
   async function flush() {
@@ -421,7 +470,7 @@
   }
 
   // ---------- calendar ----------
-  function icsFor(list) {
+  function icsFor(list, name) {
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
     const dt = (d, t) => d.replace(/-/g, "") + "T" + t.replace(":", "") + "00";
     const fold = (s) => s.replace(/[\\;,]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
@@ -436,7 +485,7 @@
     const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = list.length === 1 ? `aaa2026-${list[0].id}.ics` : "aaa2026-starred.ics";
+    a.download = name || (list.length === 1 ? `aaa2026-${list[0].id}.ics` : "aaa2026-starred.ics");
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
@@ -484,7 +533,9 @@
     if ("more" in d) { st.limit += RESULT_PAGE; render(); return; }
     if (d.person) { st.q = d.person; $("#q").value = st.q; st.view = "program"; st.sel = null; writeHash(true); render(); window.scrollTo(0, 0); return; }
     if ("share" in d) { copy(`${baseURL()}#list=${[...starred].join(",")}`, "Link copied"); return; }
-    if ("starall" in d) { for (const id of st.list || []) if (byId.has(id)) toggleStar(id, true); return; }
+    if (d.group) { e.preventDefault(); st.view = "group"; st.group = d.group; st.sel = null; st.q = ""; $("#q").value = ""; writeHash(true); render(); window.scrollTo(0, 0); return; }
+    if ("starall" in d) { const g = d.starall && GROUPS.find((g) => g.k === d.starall); for (const id of g ? g.ids : st.list || []) if (byId.has(id)) toggleStar(id, true); return; }
+    if (d.icsg) { const g = GROUPS.find((g) => g.k === d.icsg); if (g) icsFor(g.ids.map((id) => byId.get(id)).filter(Boolean), `aaa2026-${g.k}.ics`); return; }
     if ("ics" in d) { icsFor([...starred].map((id) => byId.get(id)).filter(Boolean)); return; }
     if (d.ics1) { icsFor([byId.get(Number(d.ics1))]); return; }
     if (d.copy) { copy(`${baseURL()}#s=${d.copy}`, "Link copied"); return; }
@@ -514,6 +565,8 @@
       const r = await fetch("data/core.json");
       const data = await r.json();
       S = data.sessions;
+      GROUPS = data.groups || [];
+      for (const g of GROUPS) for (const id of g.ids) groupOf.set(id, g);
     } catch {
       $("#status").innerHTML = `Couldn't load · <button type="button" onclick="location.reload()">Try again</button>`;
       return;

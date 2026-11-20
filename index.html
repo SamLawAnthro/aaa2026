@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
+<script>
+// The program moved from GitHub Pages. Forward there, bringing this browser's stars and any shared link.
+(function () {
+  if (location.hostname !== "samlawanthro.github.io") return;
+  var h = location.hash.slice(1), m = "";
+  try {
+    var d = JSON.parse(localStorage.getItem("aaa26.device") || "null");
+    var s = JSON.parse(localStorage.getItem("aaa26.starred") || "[]");
+    if (d && s.length) m = "move=" + d + "~" + s.join(",");
+  } catch (e) {}
+  var hash = [h, m].filter(Boolean).join("&");
+  location.replace("https://aaa2026.hancockcommune.org/" + (hash ? "#" + hash : ""));
+})();
+</script>
 <meta name="theme-color" content="#EEEAE1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#191816" media="(prefers-color-scheme: dark)">
 <title>AAA 2026 Program</title>
@@ -42,6 +56,7 @@
       <select id="f-type" aria-label="Session type"><option value="">All types</option></select>
       <select id="f-sec" aria-label="Section"><option value="">All sections</option></select>
     </div>
+    <nav class="groups" id="groups" aria-label="Groups" hidden></nav>
   </header>
 
   <main id="main" class="block" tabindex="-1">
