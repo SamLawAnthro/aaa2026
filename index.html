@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="theme-color" content="#EEEAE1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191816" media="(prefers-color-scheme: dark)">
+<title>AAA 2026 Program</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@400;500;700&family=Alegreya+SC:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="preload" href="data/core.json" as="fetch" crossorigin>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6.1L12 16.8l-5.4 3 1.2-6.1-4.5-4.2 6.1-.7z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21" stroke-linecap="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" stroke-linecap="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="mast">
+    <div class="mast-line">
+      <h1><a href="#" data-home>AAA 2026 Program</a></h1>
+      <nav class="tabs-wide" aria-label="Views">
+        <a href="#" data-view="program" class="on">Program</a>
+        <a href="#v=starred" data-view="starred">Starred <span class="n starred-n"></span></a>
+      </nav>
+      <span class="mast-meta">St. Louis · Central time</span>
+    </div>
+    <label class="search">
+      <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+      <input id="q" type="search" placeholder="Search sessions, papers, people" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Search sessions, papers, people">
+      <button type="button" class="clear" id="clear" aria-label="Clear search" hidden><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </label>
+    <nav class="days" id="days" aria-label="Days"></nav>
+    <div class="filters">
+      <select id="f-type" aria-label="Session type"><option value="">All types</option></select>
+      <select id="f-sec" aria-label="Section"><option value="">All sections</option></select>
+    </div>
+  </header>
+
+  <main id="main" class="block" tabindex="-1">
+    <p class="status" id="status" role="status">Loading…</p>
+    <div id="list"></div>
+  </main>
+
+  <aside id="detail" class="detail" aria-label="Session" hidden></aside>
+
+  <nav class="tabbar" aria-label="Views">
+    <a href="#" data-view="program" class="on">Program</a>
+    <a href="#v=starred" data-view="starred">Starred <span class="n starred-n"></span></a>
+  </nav>
+</div>
+
+<p class="colophon">Unofficial copy of the <a href="https://americananthro.secure-platform.com/annualmeeting/solicitations/103006/sessiongallery/schedule" rel="noopener">AAA program</a> · copied Nov 20, 2026</p>
+
+<script src="app.js" defer></script>
+</body>
+</html>
