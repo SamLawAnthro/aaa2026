@@ -7,6 +7,7 @@
   ];
   const DAY_LONG = { "2026-11-18": "Wednesday, Nov 18", "2026-11-19": "Thursday, Nov 19", "2026-11-20": "Friday, Nov 20", "2026-11-21": "Saturday, Nov 21", "2026-11-22": "Sunday, Nov 22" };
   const RESULT_PAGE = 150;
+  const NOTE = `Unofficial copy of the <a href="https://americananthro.secure-platform.com/annualmeeting/solicitations/103006/sessiongallery/schedule" rel="noopener">AAA program</a> · copied Nov 20, 2026`;
 
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -53,6 +54,7 @@
   }
   function slotState(day, s, e) {
     const now = chicagoNow();
+    if (now.date < DAYS[0][0] || now.date > DAYS[DAYS.length - 1][0]) return "later";
     if (day < now.date) return "past";
     if (day > now.date) return "later";
     if (toMin(e) <= now.min) return "past";
@@ -120,7 +122,19 @@
     if (best) return `<span class="hit"><b>Paper</b>${hl(best.t, ts)}${best.p && best.p.length ? " · " + hl(best.p.map(nameOnly).join(", "), ts) : ""}</span>`;
     const who = people(x).find((n) => ts.some((t) => norm(n).includes(t)));
     if (who) return `<span class="hit"><b>Person</b>${hl(who, ts)}</span>`;
-    if (x._ha && ts.some((t) => x._ha.includes(t))) return `<span class="hit"><b>Abstract</b>match</span>`;
+    const a = abstracts && abstracts[x.id];
+    if (a) {
+      for (const txt of [a.d, ...(a.p || [])]) {
+        const n = norm(txt || "");
+        const t = ts.find((t) => n.includes(t));
+        if (!t) continue;
+        const i = n.indexOf(t);
+        const from = Math.max(0, txt.lastIndexOf(" ", Math.max(0, i - 60)) + 1);
+        const to = Math.min(txt.length, i + t.length + 90);
+        const cut = txt.slice(from, to).replace(/\s+/g, " ");
+        return `<span class="excerpt">${from > 0 ? "…" : ""}${hl(cut, ts)}${to < txt.length ? "…" : ""}</span>`;
+      }
+    }
     return "";
   }
   const nameOnly = (s) => s.split(",")[0];
@@ -139,7 +153,7 @@
     const state = opts.noState ? "" : slotState(day, s, e);
     const label = state === "now" ? "now" : state === "past" ? "" : opts.next ? "next" : "";
     return `<section class="slot ${state}" aria-label="${fmtAP(s)} to ${fmtAP(e)}">
-      <div class="key"><span class="k-start">${fmt(s)}${ampm(s) !== ampm(e) ? `<small>${ampm(s)}</small>` : ""}</span><span class="k-end">${fmt(e)}<small>${ampm(e)}</small></span>${label ? `<span class="k-state">${label}</span>` : ""}</div>
+      <div class="key"><div class="kk"><span class="k-start">${fmt(s)}${ampm(s) !== ampm(e) ? `<small>${ampm(s)}</small>` : ""}</span><span class="k-end">${fmt(e)}<small>${ampm(e)}</small></span>${label ? `<span class="k-state">${label}</span>` : ""}</div></div>
       <div class="rows">${rows}</div></section>`;
   }
   function groupSlots(list) {
@@ -164,15 +178,26 @@
       list = list.filter((x) => matches(x, ts));
       const total = list.length;
       // stay in time order, but pull title hits forward inside the result set? keep time order; it's a program.
-      const shown = list.slice(0, st.limit);
+      const spent = list.filter((x) => slotState(x.d, x.s, x.e) === "past");
+      const live = list.filter((x) => slotState(x.d, x.s, x.e) !== "past");
+      const ordered = st.showEarlier ? [...live, ...spent] : live;
+      const shown = ordered.slice(0, st.limit);
       status = total ? `${total} ${total === 1 ? "session" : "sessions"}` : "";
-      let lastDay = "";
-      for (const [k, rows] of groupSlots(shown)) {
-        const [d, s, e] = k.split("|");
-        if (d !== lastDay) { html += `<h2 class="day-head">${DAY_LONG[d] || d}</h2>`; lastDay = d; }
-        html += slotHTML(d, s, e, rows.map((x) => rowHTML(x, ts)).join(""));
-      }
-      if (total > shown.length) html += `<button type="button" class="more" data-more>Show ${Math.min(RESULT_PAGE, total - shown.length)} more</button>`;
+      const render = (arr) => {
+        let out = "", lastDay = "";
+        for (const [k, rows] of groupSlots(arr)) {
+          const [d, s, e] = k.split("|");
+          if (d !== lastDay) { out += `<h2 class="day-head">${DAY_LONG[d] || d}</h2>`; lastDay = d; }
+          rows.sort((a, b) => score(b, ts) - score(a, ts));
+          out += slotHTML(d, s, e, rows.map((x) => rowHTML(x, ts)).join(""));
+        }
+        return out;
+      };
+      html += render(shown.filter((x) => !spent.includes(x)));
+      if (spent.length && !st.showEarlier) html += `<button type="button" class="earlier" data-earlier>Earlier · <span>${spent.length} sessions</span></button>`;
+      if (st.showEarlier) html += render(shown.filter((x) => spent.includes(x)));
+      if (!live.length && !st.showEarlier && spent.length) html = `<button type="button" class="earlier" data-earlier>Earlier · <span>${spent.length} sessions</span></button>`;
+      if (ordered.length > shown.length) html += `<button type="button" class="more" data-more>Show ${Math.min(RESULT_PAGE, ordered.length - shown.length)} more</button>`;
       if (!total) html = emptyHTML("No matches");
     } else {
       list = list.filter((x) => x.d === st.day);
@@ -232,6 +257,7 @@
       if (d !== lastDay) { html += `<h2 class="day-head">${DAY_LONG[d] || d}</h2>`; lastDay = d; }
       html += slotHTML(d, s, e, rows.map((x) => rowHTML(x, [], cl.has(x.id) ? `<span class="clash">Clash</span>` : "")).join(""));
     }
+    html += `<p class="list-note">${NOTE}</p>`;
     $("#status").textContent = "";
     $("#list").innerHTML = html;
   }
@@ -271,10 +297,9 @@
       : `<p class="loading">Loading abstract…</p>`;
     el.innerHTML = `<div class="d-top">
         <button type="button" class="x" data-close aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg></button>
-        <div class="when">${DAY_LONG[x.d]} · ${fmtAP(x.s)}–${fmtAP(x.e)}<span>${esc(x.loc)}</span></div>
+        <div class="when">${DAY_LONG[x.d]} · ${fmtAP(x.s)}–${fmtAP(x.e)}<span>${esc(x.loc)} · ${esc(x.ty)}</span></div>
       </div>
       <div class="d-body">
-        <p class="d-type">${esc(x.ty)}</p>
         <h2 class="d-title" id="d-title" tabindex="-1">${esc(x.t)}</h2>
         <div class="d-actions">
           <button type="button" class="btn" data-star="${x.id}" aria-pressed="${on}"><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg>${on ? "Starred" : "Star"}${n ? ` · ${n}` : ""}</button>
@@ -283,6 +308,7 @@
         </div>
         ${facts.length ? `<dl class="d-facts">${facts.join("")}</dl>` : ""}
         ${desc}${papers}
+        <p class="d-note">${NOTE}</p>
       </div>`;
     el.hidden = false;
     if (!matchMedia("(min-width: 1100px)").matches) document.body.style.overflow = "hidden";
@@ -434,7 +460,7 @@
   $("#q").addEventListener("input", (e) => {
     clearTimeout(qTimer);
     qTimer = setTimeout(() => {
-      st.q = e.target.value.trim(); st.limit = RESULT_PAGE;
+      st.q = e.target.value.trim(); st.limit = RESULT_PAGE; st.showEarlier = false;
       if (st.view !== "program") st.view = "program";
       writeHash(false); render(); window.scrollTo(0, 0);
     }, 90);
